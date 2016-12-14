@@ -1,0 +1,8 @@
+ *sparkling.txt* A plugin to run Eslint asynchronously
+																																		 *sparkling*
+																			__ ~
+														 (_ ._  _.._| |o._  _ ~
+														 __)|_)(_|| |<||| |(_|~
+															|               _|~
+
+
