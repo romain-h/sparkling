@@ -3,10 +3,24 @@ let s:nextSignId = s:firstSignId
 let s:mainDic = {}
 
 func! sparkling#log(msg)
-	execute 'redir >> ~/vim/debug.txt'
-	silent echomsg a:msg
-	silent echo "\n"
-	silent! redir END
+  if !g:sparkling_debug
+    return
+  end
+
+  if exists('g:sparkling_debug_file')
+    execute 'redir >> ' . g:sparkling_debug_file
+    silent echomsg a:msg
+    silent! redir END
+  else
+    echomsg 'Sparkling: ' . a:msg
+  end
+endfunc
+
+func! sparkling#logError(msg)
+  execute 'normal! \<Esc>'
+  echohl ErrorMsg
+  echomsg 'Sparkling: error: ' . a:msg
+  echohl None
 endfunc
 
 " Highlight error/warning in current window
@@ -14,13 +28,13 @@ func! sparkling#HighLight(line, col, signName)
   call matchadd(a:signName, '\%' . a:line . 'l\%' . a:col . 'c')
 endfunc
 
-" func! sparkling#RemoveHighLight()
-	" for match in getmatches()
-		" if stridx(match['group'], 'Sparkling') == 0
-			" call matchdelete(match['id'])
-		" endif
-	" endfor
-" endfunc
+func! sparkling#RemoveHighLight()
+  for match in getmatches()
+    if stridx(match['group'], 'Sparkling') == 0
+      call matchdelete(match['id'])
+    endif
+  endfor
+endfunc
 
 " Display sign on sidebar.
 func! sparkling#DisplaySign(line, filePath, signName)
@@ -33,6 +47,7 @@ func! sparkling#RenderEslint(data)
 
   " Remove all previous signs for this file
   execute 'sign unplace * file=' . filePath
+  call sparkling#RemoveHighLight()
 
   let issues = get(a:data, 'messages')
   for i in issues
@@ -68,8 +83,8 @@ func! sparkling#GetErrorMsg(err)
   return a:err.message . ' (' . a:err.ruleId . ')'
 endfunc
 
-func! sparkling#RefreshCursor()
-  let currentFile = expand("%:p")
+func! sparkling#RefreshCursor(filename)
+  let currentFile = a:filename
   if has_key(s:mainDic, currentFile)
     let data = s:mainDic[currentFile]
     if has_key(data.lines, line('.'))
@@ -81,23 +96,34 @@ func! sparkling#RefreshCursor()
         for err in line_errors[1:len(line_errors)]
           if col('.') >= err.column
             let msg = sparkling#GetErrorMsg(err)
-          " Render end of line error at previous char
+            " Render end of line error at previous char
           elseif err.column == lastCol  && (col('.') + 1) == lastCol
             let msg = sparkling#GetErrorMsg(err)
           endif
         endfor
       endif
       echom 'sparkling: ' . msg
-		else
+    else
       echom ''
     endif
-	else
-		echom ''
+  else
+    echom ''
   endif
 endfunc
 
-func! sparkling#CheckSyntaxOnSave()
-	call sparkling#log('starting')
-  let command = "/Users/rom/sandbox/polecat/node_modules/.bin/eslint " . @%  . " -f json"
+func! sparkling#BuffSaveHook(filename)
+  call sparkling#log('job start for ' . a:filename)
+  let command = g:sparkling_eslint . ' ' . a:filename  . ' -f json'
   let job = job_start(command, {'close_cb': 'sparkling#CloseHandler'})
 endfunc
+
+func! sparkling#BufEnterHook(filename, type)
+  call sparkling#log('reading '. a:type .' ' . a:filename)
+  if has_key(s:mainDic, a:filename)
+    let data = s:mainDic[a:filename]
+    call sparkling#RenderEslint(data)
+  else
+    call sparkling#RemoveHighLight()
+  endif
+endfunc
+
